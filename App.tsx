@@ -1,34 +1,51 @@
-import React from 'react';
-import { useState } from 'react';
-import Header from './components/Header';
-import ImageGenerator from './components/ImageGenerator';
-import ImageRemixer from './components/ImageRemixer';
-import TabSelector from './components/common/TabSelector';
+import React, { useState, useEffect } from 'react';
 import { AppMode } from './types';
-import RedistributionModal from './components/RedistributionModal';
+import { Header } from './components/common/Header';
+import { Footer } from './components/common/Footer';
+import { TabSelector } from './components/TabSelector';
+import { ImageGenerator } from './components/ImageGenerator';
+import { ImageRemixer } from './components/ImageRemixer';
+import { RedistributionModal } from './components/RedistributionModal';
+import { useImageHistory } from './hooks/useImageHistory';
+import { ImageHistory } from './components/ImageHistory';
 
 const App: React.FC = () => {
-  const [mode, setMode] = useState<AppMode>(AppMode.GENERATE);
-  const [isRedistributionModalOpen, setIsRedistributionModalOpen] = useState(false);
+  const [appMode, setAppMode] = useState<AppMode>(AppMode.GENERATE);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const { history, addImageToHistory, clearHistory } = useImageHistory();
+
+  useEffect(() => {
+    // Show modal on first visit
+    const hasSeenModal = localStorage.getItem('hasSeenDisclaimer');
+    if (!hasSeenModal) {
+      setIsModalOpen(true);
+    }
+  }, []);
+
+  const handleCloseModal = () => {
+    localStorage.setItem('hasSeenDisclaimer', 'true');
+    setIsModalOpen(false);
+  };
+  
+  const handleOpenModal = () => {
+    setIsModalOpen(true);
+  };
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white font-sans">
-      <Header onOpenRedistributionModal={() => setIsRedistributionModalOpen(true)} />
-      <main className="container mx-auto px-4 py-8">
-        <div className="max-w-4xl mx-auto">
-          <TabSelector selectedMode={mode} onSelectMode={setMode} />
-          <div className="mt-8">
-            {mode === AppMode.GENERATE ? <ImageGenerator /> : <ImageRemixer />}
+    <div className="bg-gray-900 min-h-screen text-white font-sans antialiased">
+      <div className="container mx-auto px-4 py-8 max-w-4xl">
+        <Header />
+        <main className="mt-8">
+          <TabSelector currentMode={appMode} onModeChange={setAppMode} />
+          <div className="p-6 bg-gray-800 rounded-b-lg shadow-xl border-t-0 border-gray-700">
+            {appMode === AppMode.GENERATE && <ImageGenerator onImageGenerated={addImageToHistory} />}
+            {appMode === AppMode.REMIX && <ImageRemixer onImageGenerated={addImageToHistory} />}
           </div>
-        </div>
-      </main>
-      <footer className="text-center py-6 text-gray-500 text-sm">
-        <p>Francine Image Studio. For mature audiences. Please use responsibly.</p>
-      </footer>
-      <RedistributionModal
-        isOpen={isRedistributionModalOpen}
-        onClose={() => setIsRedistributionModalOpen(false)}
-      />
+        </main>
+        <ImageHistory history={history} onClear={clearHistory} />
+        <Footer onDisclaimerClick={handleOpenModal}/>
+      </div>
+      <RedistributionModal isOpen={isModalOpen} onClose={handleCloseModal} />
     </div>
   );
 };
