@@ -1,18 +1,33 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { generateImage } from '../services/geminiService';
 import Button from './common/Button';
 import Spinner from './common/Spinner';
-import { AspectRatio } from '../types';
+import { AspectRatio, StoredImage } from '../types';
 
-// This detailed base prompt guides the AI to generate accurate images of Francine in the show's style.
 const basePrompt = "A high-resolution, full-color image of Francine Smith from American Dad. She is a tall, slender woman with blonde hair styled in a flip with a prominent side part, and a noticeable chin. The image must be in the distinct American Dad animation style, featuring clean, bold outlines and cel-shaded coloring. The scene should capture the show's comedic and slightly satirical tone.";
 
-const ImageGenerator: React.FC = () => {
+interface ImageGeneratorProps {
+  addImageToHistory: (image: Omit<StoredImage, 'id' | 'timestamp'>) => void;
+  initialData?: { prompt: string; aspectRatio: AspectRatio } | null;
+  onDataConsumed?: () => void;
+}
+
+const ImageGenerator: React.FC<ImageGeneratorProps> = ({ addImageToHistory, initialData, onDataConsumed }) => {
   const [prompt, setPrompt] = useState('');
   const [aspectRatio, setAspectRatio] = useState<AspectRatio>(AspectRatio.SQUARE);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [generatedImage, setGeneratedImage] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (initialData) {
+      setPrompt(initialData.prompt);
+      setAspectRatio(initialData.aspectRatio);
+      setGeneratedImage(null);
+      setError(null);
+      onDataConsumed?.();
+    }
+  }, [initialData, onDataConsumed]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -25,12 +40,17 @@ const ImageGenerator: React.FC = () => {
     setError(null);
     setGeneratedImage(null);
 
-    // Combine the base prompt with the user's custom description for a more accurate result.
     const fullPrompt = `${basePrompt} The scene is: ${prompt.trim()}`;
 
     try {
       const imageUrl = await generateImage(fullPrompt, aspectRatio);
       setGeneratedImage(imageUrl);
+      addImageToHistory({
+        imageDataUrl: imageUrl,
+        prompt: prompt.trim(),
+        type: 'generate',
+        aspectRatio,
+      });
     } catch (err: any) {
       setError(err.message || 'An unknown error occurred.');
     } finally {

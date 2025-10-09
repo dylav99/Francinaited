@@ -1,14 +1,21 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { remixImage } from '../services/geminiService';
 import Button from './common/Button';
 import Spinner from './common/Spinner';
+import { StoredImage } from '../types';
 
 interface RemixResult {
   imageUrl: string;
   text: string;
 }
 
-const ImageRemixer: React.FC = () => {
+interface ImageRemixerProps {
+  addImageToHistory: (image: Omit<StoredImage, 'id' | 'timestamp'>) => void;
+  initialFile?: File | null;
+  onDataConsumed?: () => void;
+}
+
+const ImageRemixer: React.FC<ImageRemixerProps> = ({ addImageToHistory, initialFile, onDataConsumed }) => {
   const [prompt, setPrompt] = useState('');
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -18,26 +25,39 @@ const ImageRemixer: React.FC = () => {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const updateFile = (file: File) => {
+    if (!file.type.startsWith('image/')) {
+      setError('Please select a valid image file (PNG, JPG, etc.).');
+      return;
+    }
+    if (file.size > 4 * 1024 * 1024) { // 4MB limit
+      setError('Image file size should not exceed 4MB.');
+      return;
+    }
+    
+    setImageFile(file);
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setPreviewUrl(reader.result as string);
+    };
+    reader.readAsDataURL(file);
+    setError(null);
+  }
+
+  useEffect(() => {
+    if (initialFile) {
+      updateFile(initialFile);
+      setResult(null);
+      setError(null);
+      setPrompt('');
+      onDataConsumed?.();
+    }
+  }, [initialFile, onDataConsumed]);
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      // Basic validation for image type and size
-      if (!file.type.startsWith('image/')) {
-        setError('Please select a valid image file (PNG, JPG, etc.).');
-        return;
-      }
-      if (file.size > 4 * 1024 * 1024) { // 4MB limit
-        setError('Image file size should not exceed 4MB.');
-        return;
-      }
-      
-      setImageFile(file);
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setPreviewUrl(reader.result as string);
-      };
-      reader.readAsDataURL(file);
-      setError(null);
+      updateFile(file);
     }
   };
 
@@ -57,12 +77,16 @@ const ImageRemixer: React.FC = () => {
     setResult(null);
 
     const userPrompt = prompt.trim();
-    // This simplified prompt is more direct, preventing API errors from the image model.
     const fullPrompt = `Enhance this image to be high-resolution and ultra-detailed, strictly maintaining the American Dad animation style. Apply the following change: "${userPrompt}". When the prompt is suggestive or foot-focused, pay special attention to rendering Francine's feet with beautiful, delicate, and anatomically correct detail. The final image must preserve the original's core composition and character likeness.`;
 
     try {
       const remixResult = await remixImage(fullPrompt, imageFile);
       setResult(remixResult);
+      addImageToHistory({
+        imageDataUrl: remixResult.imageUrl,
+        prompt: userPrompt,
+        type: 'remix',
+      });
     } catch (err: any) {
       setError(err.message || 'An unknown error occurred.');
     } finally {
@@ -84,6 +108,9 @@ const ImageRemixer: React.FC = () => {
           <div 
             className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-600 border-dashed rounded-md cursor-pointer hover:border-indigo-500 transition-colors"
             onClick={triggerFileSelect}
+            onDrop={(e) => { e.preventDefault(); e.stopPropagation(); if (e.dataTransfer.files && e.dataTransfer.files[0]) updateFile(e.dataTransfer.files[0]); }}
+            onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
+            onDragEnter={(e) => { e.preventDefault(); e.stopPropagation(); }}
           >
             <div className="space-y-1 text-center">
               {previewUrl ? (
@@ -94,7 +121,7 @@ const ImageRemixer: React.FC = () => {
                 </svg>
               )}
               <div className="flex text-sm text-gray-400 justify-center">
-                <p>{imageFile ? imageFile.name : 'Click to upload a file'}</p>
+                <p>{imageFile ? imageFile.name : 'Click or drag & drop to upload'}</p>
               </div>
               <p className="text-xs text-gray-500">PNG, JPG, WEBP up to 4MB</p>
             </div>
